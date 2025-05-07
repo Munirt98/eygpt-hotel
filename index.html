@@ -12,22 +12,173 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
   <style>
-    /* (styles unchanged) */
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+    header { text-align: center; margin-bottom: 20px; }
+    header h1 { margin: 0; font-size: 2em; }
+    header p { margin: 5px 0 0; color: #555; }
+    .date-picker { text-align: center; margin-bottom: 20px; }
+    .date-picker label { margin: 0 10px; font-size: 1em; }
+    .filters { display: flex; justify-content: space-between; flex-wrap: wrap; margin-bottom: 20px; }
+    .category-nav button { margin: 5px; padding: 8px 12px; border: none; background: #007BFF; color: #fff; cursor: pointer; border-radius: 4px; }
+    .category-nav button.active { background: #0056b3; }
+    .sort { display: flex; align-items: center; margin: 5px; }
+    .sort label { margin-right: 8px; }
+    .sort select, .sort button { margin-left: 8px; padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; }
+    .hotel-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+    .hotel-card { background: #fff; border: 1px solid #ddd; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .hotel-card img { width: 100%; height: 200px; object-fit: cover; }
+    .hotel-info { padding: 15px; }
+    .hotel-info h3 { margin: 0 0 10px; font-size: 1.2em; }
+    .form-row { margin-bottom: 10px; }
+    .form-row label { display: block; margin-bottom: 4px; color: #333; font-size: 0.9em; }
+    .form-row select, .form-row input { width: 100%; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+    .summary { font-size: 1.2em; text-align: right; margin-bottom: 20px; }
+    .request-form { background: #fff; padding: 20px; border-radius: 6px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+    .request-form input, .request-form button { width: 100%; padding: 8px; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 4px; }
+    .request-form button { background: #28a745; color: #fff; border: none; cursor: pointer; font-size: 1em; }
+    footer { text-align: center; margin: 30px 0; }
+    footer a { color: #007BFF; text-decoration: none; font-weight: bold; }
   </style>
 </head>
 <body>
-  <!-- (body content unchanged) -->
+  <header>
+    <h1>Egypt Hotels & Trips</h1>
+    <p>Select dates, rooms & types, then send your request</p>
+  </header>
+
+  <div class="date-picker">
+    <label>Check-in: <input type="date" id="checkIn"></label>
+    <label>Check-out: <input type="date" id="checkOut"></label>
+  </div>
+
+  <div class="filters">
+    <div class="category-nav">
+      <button data-category="All" class="active">All</button>
+      <button data-category="Cairo Hotels">Cairo Hotels</button>
+      <button data-category="Alexandria Hotels">Alexandria Hotels</button>
+      <button data-category="Trips">Trips</button>
+    </div>
+    <div class="sort">
+      <label for="sortSelect">Sort By</label>
+      <select id="sortSelect">
+        <option value="name-asc">Name: A → Z</option>
+        <option value="name-desc">Name: Z → A</option>
+        <option value="price-asc">Price: Low → High</option>
+        <option value="price-desc">Price: High → Low</option>
+      </select>
+      <button id="clearSort" type="button">Clear Sort</button>
+    </div>
+  </div>
+
+  <div id="hotelList" class="hotel-list"></div>
+  <div class="summary">Total: $<span id="totalPrice">0.00</span></div>
+
+  <form id="requestForm" class="request-form">
+    <input type="email" id="email" name="email" placeholder="Your Email" required>
+    <input type="text"  id="guestName" name="guestName" placeholder="Your Name" required>
+    <button type="submit">Send a Request</button>
+  </form>
+
   <footer><a href="admin.html">Go to Admin Page</a></footer>
 
   <script>
-    // Initialize Firebase for public page
+    // Initialize Firebase
     const firebaseConfig = {
       // TODO: paste your firebaseConfig here
     };
     firebase.initializeApp(firebaseConfig);
     const db = firebase.firestore();
 
-    // (rest of index.js logic unchanged)
+    let hotelsData = [];
+
+    // Date utils
+    function formatDate(d) { return d.toISOString().split('T')[0]; }
+    function computeNights() {
+      const inD = new Date(document.getElementById('checkIn').value);
+      const outD = new Date(document.getElementById('checkOut').value);
+      const diff = (outD - inD) / (1000*60*60*24);
+      return diff > 0 ? diff : 0;
+    }
+
+    // Render
+    function createCard(item) {
+      const card = document.createElement('div');
+      card.className = 'hotel-card';
+      card.dataset.category = item.category;
+      card.dataset.basePrice = item.basePrice;
+      card.dataset.earlyFee = item.earlyFee;
+      card.innerHTML = `
+        <img src="${item.image}" alt="${item.name}">
+        <div class="hotel-info">
+          <h3>${item.name}</h3>
+          <p>${item.supplementLabel}</p>
+          <div class="form-row"><label><input type="checkbox" class="select-item" checked> Select</label></div>
+          <div class="form-row"><label>Room Type</label><select class="roomType"><option value="1">Single</option><option value="2">Double</option><option value="3">Triple</option></select></div>
+          <div class="form-row"><label>Rooms</label><select class="roomNumber">${[1,2,3,4].map(n=>`<option value="${n}">${n}</option>`).join('')}</select></div>
+          <div class="form-row"><label>Early Check-in</label><select class="early"><option value="0">No</option><option value="${item.earlyFee}">Yes + $${item.earlyFee}</option></select></div>
+          <div class="form-row"><label>Nights: <span class="nightsCount">0</span></label></div>
+          <div class="form-row"><label>Price: $<span class="price">0.00</span></label></div>
+        </div>`;
+      card.querySelector('.select-item').addEventListener('change', updateTotal);
+      ['roomType','roomNumber','early'].forEach(cls=>card.querySelector('.'+cls).addEventListener('change',()=>updatePrice(card)));
+      return card;
+    }
+    function renderList(data) {
+      const list = document.getElementById('hotelList');
+      list.innerHTML=''; data.forEach(i=>list.appendChild(createCard(i)));
+      updateAll();
+    }
+    function updatePrice(card) {
+      const nights = computeNights(); card.querySelector('.nightsCount').textContent = nights;
+      const rooms = +card.querySelector('.roomNumber').value;
+      const typeMult = +card.querySelector('.roomType').value;
+      const base = +card.dataset.basePrice;
+      const early = +card.querySelector('.early').value;
+      const cost = (base*typeMult*nights*rooms)+(early*rooms);
+      card.querySelector('.price').textContent = cost.toFixed(2);
+      updateTotal();
+    }
+    function updateAll() { document.querySelectorAll('.hotel-card').forEach(c=>updatePrice(c)); }
+    function updateTotal() {
+      const total = Array.from(document.querySelectorAll('.hotel-card')).reduce((s,c)=>c.querySelector('.select-item').checked? s+parseFloat(c.querySelector('.price').textContent):s,0);
+      document.getElementById('totalPrice').textContent = total.toFixed(2);
+    }
+
+    // Firestore
+    function loadHotels() {
+      db.collection('Hotels').onSnapshot(snap=>{
+        hotelsData = []; snap.forEach(d=>hotelsData.push({id:d.id,...d.data()}));
+        renderList(hotelsData);
+      });
+    }
+
+    // Filters & Sort
+    document.querySelectorAll('.category-nav button').forEach(btn=>btn.addEventListener('click',()=>{
+      document.querySelectorAll('.category-nav button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active'); const cat=btn.dataset.category;
+      document.querySelectorAll('.hotel-card').forEach(c=>c.style.display=(cat==='All'||c.dataset.category===cat)?'block':'none');
+    }));
+    document.getElementById('sortSelect').addEventListener('change',e=>{
+      const v=e.target.value; const cards=Array.from(document.querySelectorAll('.hotel-card'));
+      cards.sort((a,b)=>{
+        if(v==='name-asc')return a.querySelector('h3').textContent.localeCompare(b.querySelector('h3').textContent);
+        if(v==='name-desc')return b.querySelector('h3').textContent.localeCompare(a.querySelector('h3').textContent);
+        if(v==='price-asc')return parseFloat(a.querySelector('.price').textContent)-parseFloat(b.querySelector('.price').textContent);
+        if(v==='price-desc')return parseFloat(b.querySelector('.price').textContent)-parseFloat(a.querySelector('.price').textContent);
+      }); cards.forEach(c=>document.getElementById('hotelList').appendChild(c));
+    });
+    document.getElementById('clearSort').addEventListener('click',()=>{document.getElementById('sortSelect').value='name-asc';renderList(hotelsData)});
+    document.getElementById('checkIn').addEventListener('change',updateAll);
+    document.getElementById('checkOut').addEventListener('change',updateAll);
+
+    document.addEventListener('DOMContentLoaded',()=>{
+      const t=new Date(),tm=new Date();tm.setDate(t.getDate()+1);
+      document.getElementById('checkIn').value=formatDate(t);
+      document.getElementById('checkOut').value=formatDate(tm);
+      loadHotels();
+    });
+
+    document.getElementById('requestForm').addEventListener('submit',e=>{e.preventDefault();alert('Request sent!');});
   </script>
 </body>
 </html>
@@ -48,23 +199,121 @@
   <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
 
   <style>
-    /* (styles unchanged) */
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    .hidden { display: none; }
+    input, select, button { width: 100%; padding: 8px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; }
+    button { cursor: pointer; }
+    #editorList > div { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #eee; }
+    #logoutBtn { background: #c0392b; color: #fff; border: none; margin-bottom: 20px; }
+    .saveBtn { background: #27ae60; color: #fff; border: none; margin-bottom: 5px; }
+    .deleteBtn { background: #e74c3c; color: #fff; border: none; }
+    footer { text-align: center; margin: 30px 0; }
+    footer a { color: #007BFF; text-decoration: none; font-weight: bold; }
   </style>
 </head>
 <body>
-  <!-- (login and editor content unchanged) -->
+  <div id="loginDiv">
+    <h2>Admin Login</h2>
+    <input id="loginEmail"    placeholder="Username (Munir)" />
+    <input id="loginPassword" type="password" placeholder="Password" />
+    <button id="loginBtn">Log In</button>
+    <div id="loginError" style="color:red;"></div>
+  </div>
+
+  <div id="editorDiv" class="hidden">
+    <button id="logoutBtn">Log Out</button>
+    <h2>Edit Hotels & Trips</h2>
+    <div id="editorList"></div>
+
+    <h3>Add New Hotel/Trip</h3>
+    <input id="newName"        placeholder="Name" />
+    <input id="newCategory"    placeholder="Category" />
+    <input id="newImage"       placeholder="Image URL" />
+    <input id="newBasePrice"   type="number" placeholder="Base Price" />
+    <input id="newSupplement"  placeholder="Supplement Label" />
+    <input id="newEarlyFee"    type="number" placeholder="Early Fee" />
+    <button id="addNewBtn">Add Item</button>
+  </div>
+
   <footer><a href="index.html">Back to Booking Page</a></footer>
 
   <script>
-    // Initialize Firebase for admin page (use a distinct variable to avoid redeclaration)
-    const adminFirebaseConfig = {
+    // Initialize Firebase
+    const firebaseConfig = {
       // TODO: paste your firebaseConfig here
     };
-    firebase.initializeApp(adminFirebaseConfig);
+    firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
     const db   = firebase.firestore();
 
-    // (rest of admin.js logic unchanged)
+    const loginDiv   = document.getElementById('loginDiv');
+    const editorDiv  = document.getElementById('editorDiv');
+    const editorList = document.getElementById('editorList');
+
+    document.getElementById('loginBtn').onclick = () => {
+      const email = document.getElementById('loginEmail').value;
+      const pwd   = document.getElementById('loginPassword').value;
+      auth.signInWithEmailAndPassword(email, pwd)
+        .then(() => initEditor())
+        .catch(e => document.getElementById('loginError').innerText = e.message);
+    };
+    document.getElementById('logoutBtn').onclick = () => auth.signOut().then(() => {
+      loginDiv.classList.remove('hidden');
+      editorDiv.classList.add('hidden');
+    });
+
+    function initEditor() {
+      loginDiv.classList.add('hidden');
+      editorDiv.classList.remove('hidden');
+      watchHotels();
+    }
+
+    function watchHotels() {
+      db.collection('Hotels').onSnapshot(snap => {
+        editorList.innerHTML = '';
+        snap.forEach(doc => {
+          const data = { id: doc.id, ...doc.data() };
+          const row = document.createElement('div');
+          row.innerHTML = `
+            <input class="editName"       value="${data.name}" />
+            <input class="editCategory"   value="${data.category}" />
+            <input class="editImage"      value="${data.image}" />
+            <input class="editBasePrice"  type="number" value="${data.basePrice}" />
+            <input class="editSupplement" value="${data.supplementLabel}" />
+            <input class="editEarlyFee"   type="number" value="${data.earlyFee}" />
+            <button class="saveBtn">Save</button>
+            <button class="deleteBtn">Delete</button>
+          `;
+          row.querySelector('.saveBtn').onclick = () => {
+            db.collection('Hotels').doc(data.id).set({
+              name:            row.querySelector('.editName').value,
+              category:        row.querySelector('.editCategory').value,
+              image:           row.querySelector('.editImage').value,
+              basePrice:      +row.querySelector('.editBasePrice').value,
+              supplementLabel: row.querySelector('.editSupplement').value,
+              earlyFee:       +row.querySelector('.editEarlyFee').value,
+              typeMultipliers: { Single:1, Double:2, Triple:3 }
+            });
+          };
+          row.querySelector('.deleteBtn').onclick = () => {
+            db.collection('Hotels').doc(data.id).delete();
+          };
+          editorList.appendChild(row);
+        });
+      });
+    }
+
+    document.getElementById('addNewBtn').onclick = () => {
+      db.collection('Hotels').add({
+        name:            document.getElementById('newName').value,
+        category:        document.getElementById('newCategory').value,
+        image:           document.getElementById('newImage').value,
+        basePrice:      +document.getElementById('newBasePrice').value,
+        supplementLabel: document.getElementById('newSupplement').value,
+        earlyFee:       +document.getElementById('newEarlyFee').value,
+        typeMultipliers: { Single:1, Double:2, Triple:3 }
+      });
+    };
   </script>
 </body>
 </html>
