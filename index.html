@@ -1,0 +1,70 @@
+<!-- ========== index.html ========== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Egypt Hotels & Trips</title>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* (styles unchanged) */
+  </style>
+</head>
+<body>
+  <!-- (body content unchanged) -->
+  <footer><a href="admin.html">Go to Admin Page</a></footer>
+
+  <script>
+    // Initialize Firebase for public page
+    const firebaseConfig = {
+      // TODO: paste your firebaseConfig here
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    // (rest of index.js logic unchanged)
+  </script>
+</body>
+</html>
+
+
+<!-- ========== admin.html ========== -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Egypt Hotels</title>
+
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-firestore-compat.js"></script>
+
+  <style>
+    /* (styles unchanged) */
+  </style>
+</head>
+<body>
+  <!-- (login and editor content unchanged) -->
+  <footer><a href="index.html">Back to Booking Page</a></footer>
+
+  <script>
+    // Initialize Firebase for admin page (use a distinct variable to avoid redeclaration)
+    const adminFirebaseConfig = {
+      // TODO: paste your firebaseConfig here
+    };
+    firebase.initializeApp(adminFirebaseConfig);
+    const auth = firebase.auth();
+    const db   = firebase.firestore();
+
+    // (rest of admin.js logic unchanged)
+  </script>
+</body>
+</html>
